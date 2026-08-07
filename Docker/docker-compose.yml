@@ -59,12 +59,12 @@ services:
         condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
-    command:
-      - -broker=kafka:29092
-      - -topic=security.events
-      - -rate=10
-      - -batch-size=50
-      - -source=simulated
+    environment:
+      KAFKA_BROKER: kafka:29092
+      KAFKA_TOPIC: security.events
+      EVENT_RATE: "10"
+      KAFKA_BATCH_SIZE: "50"
+      EVENT_SOURCE: simulated
     restart: unless-stopped
     stop_grace_period: 30s
 
