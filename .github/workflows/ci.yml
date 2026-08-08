@@ -42,3 +42,29 @@ jobs:
 
       - name: Run go vet
         run: go vet ./...
+
+  integration:
+    name: Kafka integration test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Start Kafka
+        run: docker compose -f Docker/docker-compose.yml up -d --wait kafka
+
+      - name: Run integration tests
+        run: go test -race -cover -tags=integration ./...
+
+      - name: Show Kafka logs on failure
+        if: failure()
+        run: docker compose -f Docker/docker-compose.yml logs kafka
+
+      - name: Stop Kafka
+        if: always()
+        run: docker compose -f Docker/docker-compose.yml down -v

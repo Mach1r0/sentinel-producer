@@ -3,8 +3,10 @@ package kafka
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/Mach1r0/sentinel-producer/internal/event"
@@ -15,18 +17,27 @@ type Config struct {
 	Broker    string
 	Topic     string
 	BatchSize int
+	Logger    *slog.Logger
 }
 
 type Producer struct {
-	writer *kafkago.Writer
+	writer  *kafkago.Writer
+	logger  *slog.Logger
+	metrics counters
 }
 
-func NewProducer(cfg Config) *Producer {
-	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = 50
+func NewProducer(cfg Config) (*Producer, error) {
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
 	}
 
-	writer := &kafkago.Writer{
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	producer := &Producer{logger: logger}
+	producer.writer = &kafkago.Writer{
 		Addr:     kafkago.TCP(cfg.Broker),
 		Topic:    cfg.Topic,
 		Balancer: &kafkago.Hash{},
@@ -43,28 +54,53 @@ func NewProducer(cfg Config) *Producer {
 
 		Async:                  true,
 		AllowAutoTopicCreation: false,
-
-		Completion: func(messages []kafkago.Message, err error) {
-			if err != nil {
-				log.Printf(
-					"Kafka publication failed messages=%d error=%v",
-					len(messages),
-					err,
-				)
-			}
-		},
+		Completion:             producer.recordCompletion,
 	}
 
-	return &Producer{writer: writer}
+	return producer, nil
+}
+
+func validateConfig(cfg Config) error {
+	if strings.TrimSpace(cfg.Broker) == "" {
+		return errors.New("Kafka broker is required")
+	}
+
+	if strings.TrimSpace(cfg.Topic) == "" {
+		return errors.New("Kafka topic is required")
+	}
+
+	if cfg.BatchSize <= 0 {
+		return fmt.Errorf("batch size must be greater than zero: %d", cfg.BatchSize)
+	}
+
+	return nil
+}
+
+func (p *Producer) recordCompletion(messages []kafkago.Message, err error) {
+	p.metrics.batches.Add(1)
+
+	if err != nil {
+		p.metrics.failed.Add(uint64(len(messages)))
+		p.logger.Error(
+			"Kafka batch publication failed",
+			"messages", len(messages),
+			"error", err,
+		)
+		return
+	}
+
+	p.metrics.published.Add(uint64(len(messages)))
 }
 
 func (p *Producer) Send(ctx context.Context, securityEvent event.Event) error {
 	message, err := newMessage(securityEvent)
 	if err != nil {
+		p.metrics.failed.Add(1)
 		return err
 	}
 
 	if err := p.writer.WriteMessages(ctx, message); err != nil {
+		p.metrics.failed.Add(1)
 		return fmt.Errorf("write Kafka message: %w", err)
 	}
 
@@ -81,6 +117,21 @@ func (p *Producer) Close() error {
 	}
 
 	return nil
+}
+
+func (p *Producer) Metrics() Metrics {
+	if p == nil {
+		return Metrics{}
+	}
+
+	if p.writer != nil {
+		stats := p.writer.Stats()
+		if stats.Retries > 0 {
+			p.metrics.retries.Add(uint64(stats.Retries))
+		}
+	}
+
+	return p.metrics.snapshot()
 }
 
 func newMessage(securityEvent event.Event) (kafkago.Message, error) {

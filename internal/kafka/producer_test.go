@@ -2,11 +2,66 @@ package kafka
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/Mach1r0/sentinel-producer/internal/event"
+	kafkago "github.com/segmentio/kafka-go"
 )
+
+func TestNewProducerRejectsInvalidConfig(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Config
+	}{
+		{
+			name:   "empty broker",
+			config: Config{Topic: "security.events", BatchSize: 50},
+		},
+		{
+			name:   "empty topic",
+			config: Config{Broker: "localhost:9092", BatchSize: 50},
+		},
+		{
+			name:   "zero batch size",
+			config: Config{Broker: "localhost:9092", Topic: "security.events"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := NewProducer(test.config); err == nil {
+				t.Fatal("expected an invalid producer configuration error")
+			}
+		})
+	}
+}
+
+func TestRecordCompletionUpdatesMetrics(t *testing.T) {
+	producer := &Producer{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	producer.recordCompletion(make([]kafkago.Message, 3), nil)
+	producer.recordCompletion(
+		make([]kafkago.Message, 2),
+		errors.New("delivery failed"),
+	)
+
+	metrics := producer.metrics.snapshot()
+	if metrics.Published != 3 {
+		t.Errorf("expected 3 published messages, got %d", metrics.Published)
+	}
+	if metrics.Failed != 2 {
+		t.Errorf("expected 2 failed messages, got %d", metrics.Failed)
+	}
+	if metrics.Batches != 2 {
+		t.Errorf("expected 2 batches, got %d", metrics.Batches)
+	}
+}
 
 func TestNewMessage(t *testing.T) {
 	timestamp := time.Date(2026, time.August, 5, 12, 30, 0, 0, time.UTC)

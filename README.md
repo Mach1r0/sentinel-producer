@@ -29,7 +29,10 @@ flowchart LR
 - Buffers messages into configurable batches.
 - Retries failed writes with bounded backoff.
 - Waits for pending messages during graceful shutdown.
-- Supports configurable broker, topic, event rate, batch size, and source.
+- Emits structured JSON logs and a final delivery-metrics summary.
+- Tracks published events, failures, batches, and Kafka retries.
+- Supports environment variables with command-line flag overrides.
+- Validates broker, topic, event rate, batch size, and source configuration.
 - Includes unit tests, race detection, static analysis, and a real Kafka integration test.
 - Runs locally with Kafka in KRaft mode through Docker Compose.
 
@@ -133,13 +136,24 @@ go run ./cmd/producer \
 
 ## Configuration
 
-| Flag | Default | Description |
-| --- | --- | --- |
-| `-broker` | `localhost:9092` | Kafka bootstrap broker |
-| `-topic` | `security.events` | Destination topic |
-| `-rate` | `10` | Events generated per second |
-| `-batch-size` | `50` | Target number of messages in a batch |
-| `-source` | `simulated` | Event source; currently only `simulated` is supported |
+Command-line flags take precedence over environment variables.
+
+| Flag | Environment variable | Default | Description |
+| --- | --- | --- | --- |
+| `-broker` | `KAFKA_BROKER` | `localhost:9092` | Kafka bootstrap broker |
+| `-topic` | `KAFKA_TOPIC` | `security.events` | Destination topic |
+| `-rate` | `EVENT_RATE` | `10` | Events generated per second |
+| `-batch-size` | `KAFKA_BATCH_SIZE` | `50` | Target number of messages in a batch |
+| `-source` | `EVENT_SOURCE` | `simulated` | Event source; currently only `simulated` is supported |
+
+For example:
+
+```bash
+KAFKA_BROKER=localhost:9092 \
+EVENT_RATE=25 \
+KAFKA_BATCH_SIZE=100 \
+go run ./cmd/producer
+```
 
 ## Tests
 
@@ -171,6 +185,7 @@ go test -race -cover -tags=integration ./...
 ```
 
 Tests without the `integration` build tag do not require Kafka.
+The GitHub Actions workflow runs both the isolated unit suite and the Kafka integration suite.
 
 ## Project structure
 
@@ -178,13 +193,15 @@ Tests without the `integration` build tag do not require Kafka.
 .
 ├── cmd/
 │   └── producer/
-│       └── main.go
+│       ├── main.go
+│       └── main_test.go
 ├── internal/
 │   ├── event/
 │   │   ├── generator.go
 │   │   ├── generator_test.go
 │   │   └── schema.go
 │   └── kafka/
+│       ├── metrics.go
 │       ├── producer.go
 │       ├── producer_test.go
 │       └── producer_integration_test.go

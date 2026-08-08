@@ -38,11 +38,14 @@ func TestProducerPublishesEvent(t *testing.T) {
 		),
 	}
 
-	producer := NewProducer(Config{
+	producer, err := NewProducer(Config{
 		Broker:    broker,
 		Topic:     topic,
 		BatchSize: 10,
 	})
+	if err != nil {
+		t.Fatalf("create producer: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
