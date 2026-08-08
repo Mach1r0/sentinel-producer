@@ -82,5 +82,43 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
 
+  opensearch:
+    profiles: ["app"]
+    image: opensearchproject/opensearch:3.7.0
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:9200/_cluster/health >/dev/null"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+  opensearch-dashboards:
+    profiles: ["app"]
+    image: opensearchproject/opensearch-dashboards:3.7.0
+    ports:
+      - "5601:5601"
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   kafka-data:
+  opensearch-data:
