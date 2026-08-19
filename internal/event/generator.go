@@ -61,6 +61,7 @@ func generateAuthFailed() Event {
 	}
 
 	return Event{
+		ID:        newEventID(),
 		Timestamp: time.Now().UTC(),
 		EventType: "auth_failed",
 		SourceIP:  randomValue(sourceIPs),
@@ -80,6 +81,7 @@ func generateProcessCreated() Event {
 	})
 
 	return Event{
+		ID:        newEventID(),
 		Timestamp: time.Now().UTC(),
 		EventType: "process_created",
 		SourceIP:  randomValue(sourceIPs),

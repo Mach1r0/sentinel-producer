@@ -1,7 +1,10 @@
 package event
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -22,13 +25,4 @@ func newEventID() string {
 	}
 
 	return hex.EncodeToString(value)
-}
-
-return Event{
-	ID:        newEventID(),
-	Timestamp: time.Now().UTC(),
-	EventType: "process_created",
-	SourceIP:  randomValue(sourceIPs),
-	Severity:  "low",
-	Raw:       raw,
 }

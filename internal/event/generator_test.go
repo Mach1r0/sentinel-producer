@@ -121,3 +121,26 @@ func assertValidEvent(t *testing.T, securityEvent Event) {
 		t.Errorf("expected valid raw JSON, got %q", securityEvent.Raw)
 	}
 }
+
+func TestGenerateReturnsUniqueIDs(t *testing.T) {
+	generator := NewGenerator()
+	seen := make(map[string]struct{})
+
+	for range 1000 {
+		securityEvent := generator.Generate()
+
+		if securityEvent.ID == "" {
+			t.Error("expected a non-empty event ID")
+		}
+
+		if err := securityEvent.Validate(); err != nil {
+			t.Errorf("expected a valid event: %v", err)
+		}
+
+		if _, exists := seen[securityEvent.ID]; exists {
+			t.Fatalf("duplicate event ID %q", securityEvent.ID)
+		}
+
+		seen[securityEvent.ID] = struct{}{}
+	}
+}
