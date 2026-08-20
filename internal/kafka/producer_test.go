@@ -66,6 +66,7 @@ func TestRecordCompletionUpdatesMetrics(t *testing.T) {
 func TestNewMessage(t *testing.T) {
 	timestamp := time.Date(2026, time.August, 5, 12, 30, 0, 0, time.UTC)
 	securityEvent := event.Event{
+		ID:        "unit-test-event-001",
 		Timestamp: timestamp,
 		EventType: "auth_failed",
 		SourceIP:  "10.0.0.15",
@@ -105,6 +106,14 @@ func TestNewMessage(t *testing.T) {
 
 	if decoded.Severity != securityEvent.Severity {
 		t.Errorf("expected severity %q, got %q", securityEvent.Severity, decoded.Severity)
+	}
+
+	if decoded.ID != securityEvent.ID {
+		t.Errorf("expected ID %q, got %q", securityEvent.ID, decoded.ID)
+	}
+
+	if err := decoded.Validate(); err != nil {
+		t.Errorf("decoded event is invalid: %v", err)
 	}
 
 	if !json.Valid(decoded.Raw) {

@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -29,6 +31,7 @@ func TestProducerPublishesEvent(t *testing.T) {
 
 	timestamp := time.Now().UTC()
 	expected := event.Event{
+		ID:        "integration-test-event-001",
 		Timestamp: timestamp,
 		EventType: "auth_failed",
 		SourceIP:  "10.0.0.99",
@@ -95,6 +98,14 @@ func TestProducerPublishesEvent(t *testing.T) {
 		t.Fatalf("decode received event: %v", err)
 	}
 
+	if received.ID != expected.ID {
+		t.Errorf("expected ID %q, got %q", expected.ID, received.ID)
+	}
+
+	if err := received.Validate(); err != nil {
+		t.Errorf("received event is invalid: %v", err)
+	}
+
 	if received.EventType != expected.EventType {
 		t.Errorf(
 			"expected event type %q, got %q",
@@ -135,35 +146,43 @@ func TestProducerPublishesEvent(t *testing.T) {
 func createTestTopic(t *testing.T, broker, topic string) {
 	t.Helper()
 
-	client := &kafkago.Client{
-		Addr:    kafkago.TCP(broker),
-		Timeout: 10 * time.Second,
-	}
-
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
 		10*time.Second,
 	)
 	defer cancel()
 
-	response, err := client.CreateTopics(
-		ctx,
-		&kafkago.CreateTopicsRequest{
-			Topics: []kafkago.TopicConfig{
-				{
-					Topic:             topic,
-					NumPartitions:     1,
-					ReplicationFactor: 1,
-				},
-			},
-		},
-	)
+	bootstrapConn, err := kafkago.DialContext(ctx, "tcp", broker)
 	if err != nil {
-		t.Fatalf("create Kafka topic: %v", err)
+		t.Fatalf("connect to Kafka broker: %v", err)
+	}
+	defer bootstrapConn.Close()
+
+	controller, err := bootstrapConn.Controller()
+	if err != nil {
+		t.Fatalf("discover Kafka controller: %v", err)
 	}
 
-	if topicErr := response.Errors[topic]; topicErr != nil {
-		t.Fatalf("create Kafka topic %q: %v", topic, topicErr)
+	controllerAddress := net.JoinHostPort(
+		controller.Host,
+		strconv.Itoa(controller.Port),
+	)
+	controllerConn, err := kafkago.DialContext(
+		ctx,
+		"tcp",
+		controllerAddress,
+	)
+	if err != nil {
+		t.Fatalf("connect to Kafka controller: %v", err)
+	}
+	defer controllerConn.Close()
+
+	if err := controllerConn.CreateTopics(kafkago.TopicConfig{
+		Topic:             topic,
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+	}); err != nil {
+		t.Fatalf("create Kafka topic %q: %v", topic, err)
 	}
 
 	t.Cleanup(func() {
@@ -172,6 +191,11 @@ func createTestTopic(t *testing.T, broker, topic string) {
 			10*time.Second,
 		)
 		defer cleanupCancel()
+
+		client := &kafkago.Client{
+			Addr:    kafkago.TCP(broker),
+			Timeout: 10 * time.Second,
+		}
 
 		_, err := client.DeleteTopics(
 			cleanupCtx,
