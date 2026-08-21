@@ -62,11 +62,11 @@ func NewProducer(cfg Config) (*Producer, error) {
 
 func validateConfig(cfg Config) error {
 	if strings.TrimSpace(cfg.Broker) == "" {
-		return errors.New("Kafka broker is required")
+		return errors.New("kafka broker is required")
 	}
 
 	if strings.TrimSpace(cfg.Topic) == "" {
-		return errors.New("Kafka topic is required")
+		return errors.New("kafka topic is required")
 	}
 
 	if cfg.BatchSize <= 0 {
