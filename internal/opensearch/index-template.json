@@ -1,0 +1,15 @@
+{
+  "index_patterns": ["security-events-*"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "id": { "type": "keyword" },
+        "timestamp": { "type": "date" },
+        "event_type": { "type": "keyword" },
+        "source_ip": { "type": "keyword" },
+        "severity": { "type": "keyword" },
+        "raw": { "type": "object" }
+      }
+    }
+  }
+}
